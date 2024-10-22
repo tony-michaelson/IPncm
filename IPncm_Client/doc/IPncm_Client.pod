@@ -1,0 +1,219 @@
+=head1 NAME
+
+IPncm_Client - Perl interface to devices attached to this ipmon.  Intended
+to be used via IPncm_Connector.
+
+
+=head1 SYNOPSIS
+
+	use IPncm_Client;
+	my $connector = new IPncm_Client(host1, host2, host3..., hostn);
+	my $output = $connector->send_hosts("command 1\ncommand 2\ncommand 3");
+
+
+=head1 DESCRIPTION
+
+This Perl module is used to programmatically connect to (some subset of) 
+available devices connected to this IPMon over SSH and run some operations on 
+those machines.  It may or may not gather output from these operations.  It
+is (generally) going to be connected to via IPncm_Connector on the produtil
+machine, but may be run in standalone mode if the proper clogin configuration 
+information is provided to it.
+
+Goals:
+  1)  Scalability - we'll be connecting to loads of machines and we want to make
+	this as efficient as possible.  This includes optimizing the connection
+	speed, ensuring that we connect to a controlled number of devices at
+	once, including timeouts in case of failures, etc.
+  2)  Ease of use - this seems to be something done regularly, so we want
+	to make the code easy to use.  Automations including this should 
+	focus on what makes them different, not the similar connection types.
+  3)  Maintainability - I will not be the only one working on this.  Remember
+	this.  Document appropriately.
+
+
+=head1 FUNCTIONS
+
+=over 4
+
+=item new IPncm_Client("host1", "host2", "host3"..., "hostn")
+
+Returns the IPncm_Client object associated with the given hosts.  Note that
+connections are only actually open during a send_hosts() call.  Invalid hosts
+will therefore not be detected at this point.
+
+
+=item $connection->set_max_connections($num_connections)
+
+Sets the maximum concurrent connections to $num_connections.  It defaults to
+50.  This controls both open connections and number of threads opened.
+
+
+=item $connector->send_hosts("command 1\ncommand 2\ncommand 3", 
+		"host1", "host2", ...)
+
+Runs the given script on all given hosts.  The hosts must have been previously 
+added to this connector, either during the connector instantiation or via the 
+$connector->add() function.  The script may either be a string, which is sent 
+to all hosts, or a HASH reference, in which case it looks for matches (first 
+seeing if the host is defined directly, then tries to match keys expressed as 
+'/pattern/' as patterns (i.e. a key of "/wlc/" matching "thiswlcmachine"), then 
+finally defaults to the "*" key.  If no hosts are provided, the command will be 
+sent to all hosts attached to this connector.  The script that may be run is a 
+combination of simple commands (to be sent to the hosts, separated by newline 
+characters) and perl code (within a <perl>...</perl> tag).
+
+The perl that may be executed via the use of a <perl>...</perl> block is fairly 
+broad.  It is executed via an eval statement within the code, and as the "use 
+strict" and "use warnings" pragmas are pre-declared - write the code 
+appropriately.  The code is executed from the perspective of a single device 
+within the set of devices being contacted - there is currently no 
+straightforward way of getting the output from another device from within a 
+different one.  There are a number of sub-functions which may be called:
+
+=over 4
+
+=item send_host($command_block)
+		This function runs the given command or commands (separated by 
+		newlines, as before) on the device, returning the output in the 
+		standard format.  Note that perl blocks may not be used inside this 
+		function, and, in fact, doing so will cause substantial errors.
+
+=item send_to_flash($file_contents)
+		This function stores a file within the flash memory of the device and 
+		returns the filename given to it.  As of this point, there is no 
+		ability to determine the filename selected - the format used is 
+		"config-<year>-<month>-<day>.txt", as in "config-2013-9-12.txt".
+
+=item send_to_run($filename, $keep_file)
+		To be used after send_to_flash returns a filename.  This command copies 
+		the existing run configuration to flash:$filename.backup, then copies 
+		flash:$filename to run, then (if $keep_file is not true) deletes 
+		flash:$filename.  It returns the output of the various command calls 
+		used to do this.
+
+=item log_error($error)
+		Logs an error message related to this host.
+
+=item gen_int_ranges(@interfaces)
+		Given a list of interfaces, returns a list of interface ranges combined 
+		into groups of 5 (which is the maximum that can be configured at once).
+		For example, gen_int_ranges('GigabitEthernet1/0/1', 
+		'GigabitEthernet1/0/2', 'GigabitEthernet1/0/3', 'GigabitEthernet1/0/5',
+		'GigabitEthernet2/0/6') will return 'GigabitEthernet1/0/1 - 3, 
+		GigabitEthernet1/0/5, GigabitEthernet2/0/6'.
+
+=item normalize_interface($interface)
+		Given an interface, returns the interface normalized to long form.  
+		"Lo0/1" becomes "Loopback0/1", "Gi0/1/1" becomes 
+		"GigabitEthernet0/1/1", and so forth.
+
+=back
+
+It returns the output as a hash reference of the form:
+{host1 => "-- command 1 --\noutput 1\n-- perl block 1 --\noutput 2...", 
+host2 => "-- command 1 --\noutput 1\n-- perl block 1 --\noutput 2...", ... }
+
+
+=item $connector->add("host1", "host2", ...)
+
+Adds the given devices to this connector.  No connections are made to these
+devices except while send_hosts() is being called. Invalid hosts will
+therefore not be caught at this point.
+
+
+=item $connector->set_login("user", "pw", "pw2", "host")
+
+Sets login information for some device.  If the "host" parameter is undefined,
+sets the default login information for all hosts where not specifically 
+overridden by the configuration file.
+
+
+=item $connector->remove("host1", "host2", ...)
+
+Removes the provided hosts from the host list.  If called with no arguments,
+all hosts are removed.
+
+
+=item $connector->error()
+
+Returns all error output logged since the last time $connector->error() was 
+called.
+
+
+=item $connector->debug($debug_level)
+
+Sets the debug log level for this module.  If :LOG levels are imported (with
+use IPncm_Client qw(:LOG); ), you can set it to some or'd together combination
+of:
+
+=over 4
+
+=item LOG_CONN - connection information
+
+=item LOG_SEND - device send information
+
+=item LOG_TIMING - timing information
+
+=item LOG_CISCO - log output from Cisco connector perl module
+
+=item LOG_ALL - convenience constant for all of these or'd together.
+
+=back
+
+=back
+
+
+=head1 EXAMPLE
+
+	use IPncm_Client qw(:LOG);
+	my $conn = new IPncm_Client("host1", "host2");
+	$conn->debug(LOG_CONN | LOG_SEND);
+	$conn->setMaxConnections(5);
+	my $output = $conn->send_hosts("command 1");
+	my $err = $conn->error();
+	$err and die("Couldn't send to all hosts: $err");
+	print $output->{host1} . "\n";
+
+	$conn->add("host5", "host6", "host7", "host8");
+	$conn->remove("host2");
+	$conn->send_hosts("command 2\ncommand 3", "host1", "host7");
+	$err = $conn->error();
+	$err and die("Couldn't send to all hosts: $err");
+	
+	$output = $conn->send_hosts("command 4");
+	$err = $conn->error();
+	$err and die("Couldn't send to all hosts: $err");
+	my $output2  = $conn->send_hosts("command 5", 
+			grep($output->{$_} =~ /desired output/, keys(%$output)));
+	$err = $conn->error();
+	$err and die("Couldn't send to all hosts: $err");
+	foreach my $host (keys(%$output))  {
+		print "Result from $host for second command: " . $output->{$host} . 
+				"\n";
+	}
+
+	# Another way to have the same results as the previous block:
+	my $command = <<EOF;
+<perl>
+my \$out = send_host('command 4');
+if (\$out =~ /desired output/)  {
+	my \$out2 = send_host("command 5");
+	print "Result from \$hostname for second command: " . \$out2 . "\n";
+}
+</perl>
+EOF
+	$conn->send_hosts($command);
+
+=head1 SEE ALSO
+
+=over 4
+
+=item IPncm_Connector - Base class that calls this from the produtil machine.
+
+=item Net::Appliance::Session - Used for connections to Cisco devices.
+
+=back
+
+
+=cut

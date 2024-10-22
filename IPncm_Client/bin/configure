@@ -1,0 +1,5 @@
+#!/bin/bash
+
+CUR_LOC=`whoami`
+IPNCM_PATH=/home/${CUR_LOC}/IPncm_Client
+grep --exclude=configure -rIl 'BASE_USER' ${IPNCM_PATH} | xargs sed -i "s/BASE_USER/${CUR_LOC}/g"

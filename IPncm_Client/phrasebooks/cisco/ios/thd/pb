@@ -1,0 +1,41 @@
+prompt cue_generic
+    match /cue.*[\/a-zA-Z0-9._\[\]\-\@]+ ?(?:\([^)]*\))? ?[#>] ?$/
+
+prompt cue_basic
+    match /cue.*> ?$/
+
+prompt cue_privileged
+    match /cue.*# ?$/
+
+macro start_cue
+    send Service-module ISM 0/0 session clear
+    match /confirm/
+    send ""
+    match generic
+    send Service-module ISM 0/0 session
+    match user
+    send %s
+    match pass
+    send %s
+    match //
+    send "\r"
+    match cue_privileged
+    send "term editing simple\r"
+    match cue_privileged
+    send "show version\r"
+    match /SDRAM/
+    match cue_privileged
+
+macro end_cue
+    send "exit\r\n"
+    match generic
+
+macro ccn_delete
+    send ccn delete %s
+    follow /y\/n/ with "y\r\n"
+    match generic
+
+macro software_install
+    send software install %s
+    follow /\[confirm\]/ with "\r\n"
+    match generic

@@ -1,0 +1,301 @@
+
+=head1 NAME
+
+IPncm_Connector - Perl interface to ipmons and thence the devices associated
+with the ipmons.
+
+
+=head1 SYNOPSIS
+
+	use IPncm_Connector;
+	my $connector = new IPncm_Connector(host1, host2, host3..., hostn);
+	my $output = $connector->send_hosts("command 1\ncommand 2\ncommand 3");
+
+
+=head1 DESCRIPTION
+
+This Perl module is used to programmatically connect to (some subset of) 
+available devices via their associated IPMons over SSH and run some operations 
+on those machines, gathering output from these operations.  It does this by 
+connecting to some set of ipmons (which ipmons differ between environments, but 
+there is usually at least one ipmon and one backup ipmon) and running 
+IPncm_Client on each to connect to their associated devices. 
+
+Goals:
+  1)  Scalability - we'll be connecting to loads of machines and we want to make
+	this as efficient as possible.  This includes optimizing the connection
+	speed, ensuring that we connect to a controlled number of devices at
+	once, including timeouts in case of failures, etc.
+  2)  Ease of use - this seems to be something done regularly, so we want
+	to make the code easy to use.  Automations including this should 
+	focus on what makes them different, not the similar connection types.
+  3)  Maintainability - I will not be the only one working on this.  Remember
+	this.  Document appropriately.
+
+
+=head1 FUNCTIONS
+
+=over 4
+
+=item new IPncm_Connector({'option1' => 'value1'...}, "host1", "host2", 
+		"host3"..., "hostn")
+
+Returns the IPncm_Connector object associated with the given hosts.  Note that
+no connection is actually formed with the target devices until send_hosts() is 
+used.  Only a connection to the ipmons used in this environment is created.  
+Any invalid hosts (i.e. ones that aren't in the database) will be ignored and 
+an error logged in $connector->error().  The option hashref is optional.  
+Possible options are:
+
+=over 4
+
+=item all_hosts - If this is set, commands sent via send_hosts will be sent to
+all hosts being monitored by all IPmons associated with this IPncm_Connector
+instance.  The IPmons that are associated with this instance are either 
+a) ones explicitly added using the $conn->add_ipmons() function, or b) if 
+add_ipmons() hasn't been called, all IPmons referred to in the client 
+configuration(s) added with the $conn->add_client_config() function.
+
+=item always_enable - If this is not set, host devices contacted will have 
+the "enable" command called only if there is a corresponding enable password
+stored for the host device.  If it is set, host devices will attempt to use
+the login password to run the "enable" command if there is no enable password
+stored.
+
+=item backup_device_config - If this is set, before any commands are run on the 
+host devices, their current running configurations will be saved to disk in the
+/home/BASE_USER/IPncm_Connector/saved_configs/ directory.
+
+=item dir - The directory where to store output and debug information.  It 
+will be created if it does not already exist.  Defaults to 
+/home/BASE_USER/IPncm_Connector/log/.
+
+=item ipmon_creds - connection
+
+=item keep - connection
+
+=item output_file - connection
+
+=back
+
+
+=item $connector->send_hosts("command 1\ncommand 2\ncommand 3", 
+		"host1", "host2", ...)
+
+Runs the given script on all given hosts.  The hosts must have been previously
+added to this connector, either during the connector instantiation or via the 
+$connector->add() function.  If no hosts are provided, the command will be
+sent to all hosts attached to this connector.  Note that there is an implicit
+connection / disconnection going on in between calls to send_hosts (due to our
+need to only connect to a certain number of hosts at a time to avoid eating up
+system resources) - an environment you set up in a single send_hosts() call 
+will not be retained in a second one.  The command in the script may be simple
+device commands or blocks of Perl code (surrounded by <perl> ... </perl> tags) 
+to be executed (see below for information on valid Perl blocks). If different 
+things need to be sent to different hosts, the command string can instead be a
+hash reference, of the form:
+{host1 => "command 1\ncommand2\ncommand3", host2 => "command4", ...}.
+These hosts may be patterns as well - if you want to send one script to machines
+with 'wlc' in the name, another to machines with 'rtr1', and a third to 
+all other machines, you would use:
+{'/wlc/' => 'script 1', '/rtr/' => 'script 2', '*' => 'script 3'}
+It returns the output as a hash reference of the form:
+{host1 => "output 1", host2 => output2, ...}.
+
+
+=item $connector->send_ipmons("command 1\ncommand 2\ncommand 3", $direct,
+		"ipmon1", "ipmon1", ...)
+
+Sends the script to the given ipmons.  The ipmons may be given directly, by 
+giving a list of ipmons, or indirectly, in which case the devices given are 
+end devices, and the ipmons we want to send the script to are the ones that 
+correspond to the given hosts (this is controlled by the $direct flag).   If 
+no ipmons are provided, the command will be sent to the ipmons associated with 
+attached to this connector.  Note that there is an implicit connection / 
+disconnection going on in between calls to send_ipmons (due to our need to 
+only connect to a certain number of hosts at a time to avoid eating up system 
+resources) - an environment you set up in a single send_ipmons() call will not 
+be retained in a second one.  The command in the script must be simple device 
+commands separated by newlines.  Unlike send_hosts(), this function does not 
+allow different scripts to be sent to different ipmons.  It returns the output 
+as a hash reference of the form:  {host1 => "output 1", host2 => output2, ...}. 
+
+
+=item $connector->add("host1", "host2", ...)
+
+Adds the given devices to this connector.  No connections are made to these
+devices until the next time send_hosts() is called.  Invalid hosts (i.e. ones
+not in the database) will not be added, and an error will be logged to 
+$connector->error().
+
+
+=item $connector->add_ipmons("ipmon1", "ipmon2", ...)
+
+Adds the given ipmons to the list that are called No connections are made to these
+devices until the next time send_hosts() is called.  Invalid hosts (i.e. ones
+not in the database) will not be added, and an error will be logged to 
+$connector->error().
+
+
+=item $connector->remove("host1", "host2", ...)
+
+Removes the given devices from this connector.  If called with no arguments, 
+all hosts are removed.
+
+
+=item $connector->set_login("user", "pw", "pw2", "host")
+
+Sets login information for some device.  If the "host" parameter is undefined,
+sets the default login information for all hosts where not specifically 
+overridden by the configuration file.
+
+
+=item $connector->error()
+
+Returns all error output logged since the last time $connector->error() was 
+called.
+
+
+=item $connector->debug($debug_level)
+
+Sets the debug log level for this module.  If :LOG levels are imported (with
+use IPncm_Client qw(:LOG); ), you can set it to some or'd together combination
+of:
+
+=over 4
+
+=item LOG_CONN - connection information
+
+=item LOG_SEND - device send information
+
+=item LOG_TIMING - timing information
+
+=item LOG_CISCO - log output from Net::Appliance::Session connection to end devices
+
+=item LOG_SSH - log output from SSH connection to ipmons
+
+=item LOG_ALL - convenience constant for all of these or'd together.
+
+=back
+
+=back
+
+
+=head1 NOTES ON PERL USAGE
+
+The perl that may be executed via the use of a <perl>...</perl> block is fairly 
+broad.  It is executed via an eval statement within the code, and as the "use 
+strict" and "use warnings" pragmas are pre-declared - write the code 
+appropriately.  The code is executed from the perspective of a single device 
+within the set of devices being contacted - there is currently no 
+straightforward way of getting the output from another device from within a 
+different one.  There are a number of sub-functions which may be called:
+
+=over 4
+
+=item send_host($command_block)
+		This function runs the given command or commands (separated by 
+		newlines, as before) on the device, returning the output in the 
+		standard format.  Note that perl blocks may not be used inside this 
+		function, and, in fact, doing so will cause substantial errors.
+
+=item send_to_flash($file_contents)
+		This function stores a file within the flash memory of the device and 
+		returns the filename given to it.  As of this point, there is no 
+		ability to determine the filename selected - the format used is 
+		"config-<year>-<month>-<day>.txt", as in "config-2013-9-12.txt".
+
+=item send_to_run($filename, $keep_file)
+		To be used after send_to_flash returns a filename.  This command copies 
+		the existing run configuration to flash:$filename.backup, then copies 
+		flash:$filename to run, then (if $keep_file is not true) deletes 
+		flash:$filename.  It returns the output of the various command calls 
+		used to do this.
+
+=item log_error($error)
+		Logs an error message related to this host.
+
+=item gen_int_ranges(@interfaces)
+		Given a list of interfaces, returns a list of interface ranges combined 
+		into groups of 5 (which is the maximum that can be configured at once).
+		For example, gen_int_ranges('GigabitEthernet1/0/1', 
+		'GigabitEthernet1/0/2', 'GigabitEthernet1/0/3', 'GigabitEthernet1/0/5',
+		'GigabitEthernet2/0/6') will return 'GigabitEthernet1/0/1 - 3, 
+		GigabitEthernet1/0/5, GigabitEthernet2/0/6'.
+
+=item normalize_interface($interface)
+		Given an interface, returns the interface normalized to long form.  
+		"Lo0/1" becomes "Loopback0/1", "Gi0/1/1" becomes 
+		"GigabitEthernet0/1/1", and so forth.
+
+=back
+
+Also, there is a pre-defined variable, \$hostname, which contains the hostname 
+of the device being contacted.
+
+Anything printed to STDOUT will be returned as part of the output of this perl 
+block.
+
+Thus, in order to, say, print how long the various systems had been up, a valid 
+perl block might be:
+
+<perl>
+	my $output = send_host("show version");
+	$output =~ / uptime is (.*)/;
+	print "$hostname has been turned on for:  $1\n";
+</perl>
+
+
+
+=head1 EXAMPLE
+
+	use IPncm_Connector qw(:LOG);
+	my $conn = new IPncm_Connector("host1", "host2");
+	$conn->debug(LOG_CONN | LOG_SEND);
+	my $output = $conn->send_hosts("command 1");
+	my $err = $conn->error();
+	$err and die("Couldn't send to all hosts: $err");
+	print $output->{host1} . "\n";
+
+	$conn->add("host5", "host6", "host7", "host8");
+	$conn->remove("host2");
+	$conn->send_hosts("command 2\ncommand 3", "host1", "host7");
+	$err = $conn->error();
+	$err and die("Couldn't send to all hosts: $err");
+	
+	$output = $conn->send_hosts("command 4");
+	$err = $conn->error();
+	$err and die("Couldn't send to all hosts: $err");
+	my $output2  = $conn->send_hosts("command 5", grep($output->{$_} =~ /desired output/, keys(%$output)));
+	$err = $conn->error();
+	$err and die("Couldn't send to all hosts: $err");
+	foreach my $host (keys(%$output))  {
+		print "Result from $host for second command: " . $output->{$host} . "\n";
+	}
+	
+	# Another way to have the same results as the previous block:
+	my $command = <<EOF;
+<perl>
+my \$out = send_host('command 4');
+if (\$out =~ /desired output/)  {
+	my \$out2 = send_host("command 5");
+	print "Result from \$hostname for second command: " . \$out2 . "\n";
+}
+</perl>
+EOF
+	$conn->send_hosts($command);
+
+
+=head1 SEE ALSO
+
+=over 4
+
+=item IPncm_Client - The code on the IPMons that actually runs things.
+
+=item Net::OpenSSH - Used for connections to IPMons.
+
+=back
+
+
+=cut
+

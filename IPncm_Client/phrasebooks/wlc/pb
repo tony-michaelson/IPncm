@@ -1,0 +1,72 @@
+prompt generic
+    match /(?:\>|System will now restart\!) ?$/
+
+prompt save
+    match /(ould you like to save them now|re you sure you want to save)/
+
+prompt user
+    match /[Uu]ser/
+
+prompt pass
+    match /[Pp]assword: ?$/
+
+macro disconnect
+    send logout
+    follow /\([yY]/[nN]\)/ with "y\n"
+    match generic
+
+macro save_config
+    send save config
+    match save
+    send y
+    match generic
+
+macro reset_system
+    send reset system
+    match /reset/
+    send y
+    match generic
+
+macro enable_paging
+    send config paging enable
+    match generic
+
+macro disable_paging
+    send config paging disable
+    match generic
+
+macro config_wlan_load
+    send config wlan load-balance %s
+    match /Continue\?/
+    send y
+    match generic
+
+macro config_wlan_band
+    send config wlan band-select %s
+    match /Continue\?/
+    send y
+    match generic
+
+macro config_802_11a_disable
+    send config 802.11a disable network
+    match /Are you sure you want to continue/
+    send y
+    match generic
+
+macro 802_11a_disable
+    send 802.11a disable network
+    match /Are you sure you want to continue/
+    send y
+    match generic
+
+macro conf_country
+    send config country %s
+    follow /\(y\/n\)/ with "y\n"
+    match generic
+
+macro transfer_download_start
+    send transfer download start
+    follow /\(y\/N\)/ with "y\n"
+    match generic
+
+	

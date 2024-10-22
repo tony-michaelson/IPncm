@@ -1,0 +1,12 @@
+
+# README
+
+This project was written for a specific managed services contract and eventually managed configurations for over 200K customer devices spanning Cisco routing, switching, telephony, linux hosts and just about any device with an SSH or Telnet connection capability. The project is capable of handling IOS upgrades as well and was successful in upgrading IOS devices for a fortune 50 retail company's entire network, over 30K devices.
+
+End devices only need an SSH user/pass configured for IPncm to deploy configurations to the device.
+
+# USES
+
+- Auditing
+- Configuration Changes
+- IOS Upgrades

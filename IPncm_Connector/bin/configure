@@ -1,0 +1,8 @@
+#!/bin/bash
+
+CUR_LOC=`whoami`
+IPNCM_PATH=/home/${CUR_LOC}/IPncm_Connector
+grep --exclude=configure -rIl 'BASE_USER' ${IPNCM_PATH} | xargs sed -i "s/BASE_USER/${CUR_LOC}/g"
+if [ ! -f ${IPNCM_PATH}/lib/Constants.pm ]; then
+	mv ${IPNCM_PATH}/lib/Constants.new.pm ${IPNCM_PATH}/lib/Constants.pm
+fi

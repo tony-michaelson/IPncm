@@ -1,0 +1,88 @@
+prompt user
+    match /(?:[Uu]ser ?[Nn]ame:|[Uu]ser\s*\:|(?<![Ll]ast )login\:)/
+
+prompt generic
+    match /(?:[\/a-zA-Z0-9._\[\]\-\@]+ ?(?:\([^)]*\))? ?[#>]|Closing connection...|Connection to .* closed.|^>|^Enter Command:)\s*$/
+
+prompt basic
+    match /(Enter Command:|>)\s*$/
+
+prompt privileged
+    match /(?:#|^>|Enter Command:)\s*$/
+
+prompt configure
+    match /(?:\([^)]*\)#|^>|Enter Command:)\s*$/
+	
+prompt failed_connection
+    match /Authorization failed./
+
+macro delete
+    send delete %s
+    follow /^Delete/ with \n
+    match generic
+    
+macro mkdir
+    send mkdir %s
+    follow /\[.*\]/ with \n
+    match generic
+    
+macro copy_scp
+    send copy %s
+    follow /(?:Destination|Address or name|confirm|\[.*\])/ with \n
+    match pass
+    send %s
+    match generic
+
+macro copy_nonscp
+    send copy %s
+    follow /(?:Destination|Address or name|confirm|\[.*\])/ with \n
+    match generic
+
+macro wr_confirm
+    send %s
+    follow /(?:confirm|\[.*\])/ with \n
+    match generic
+
+macro reload
+    send reload %s
+    follow /System configuration has been modified./ with "yes\n"
+    match /confirm/
+    send ""
+    match generic
+
+macro config_802_11a_disable
+    send config 802.11a disable network
+    match /Are you sure you want to continue/
+    send y
+    match generic
+
+macro 802_11a_disable
+    send 802.11a disable network
+    match /Are you sure you want to continue/
+    send y
+    match generic
+
+macro ssh_l
+    send ssh -l %s
+    match pass
+    send %s
+    match /[\/a-zA-Z0-9._\[\]\-\@ ]+ ?[#>:]\s*$/
+	
+macro end_ssl
+    send quit
+    match generic
+
+macro software_run
+    send software %s
+    follow /\[yes\/no\]/ with "yes\n"
+    match generic
+	
+macro conf_country
+    send config country %s
+    follow /\(y\/n\)/ with "y\n"
+    match generic
+
+macro no_username
+    send no username %s
+    follow /confirm/ with "\n"
+    match generic

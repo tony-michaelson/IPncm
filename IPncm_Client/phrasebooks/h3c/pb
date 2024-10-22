@@ -1,0 +1,50 @@
+prompt generic
+    match /[\[<][\/a-zA-Z0-9._:-]+[\]>] ?$/
+
+prompt basic
+    match /<.*> ?$/
+
+prompt privileged
+    match /<.*> ?$/
+
+prompt configure
+    match /\[[\/a-zA-Z0-9._:-]+\] ?$/
+
+prompt user
+    match /(?:[Uu]sername|[Uu]ser\:|(?<![Ll]ast )login\:|login as:)/
+
+prompt pass
+    match /[Pp]assword:\s*$/
+
+macro begin_privileged
+    send super
+    match pass
+    send %s
+    match privileged
+
+macro end_privileged
+    send super 0
+    match basic
+
+macro begin_configure
+    send system-view
+    match configure
+
+macro end_configure
+    send quit
+    match privileged
+
+macro enable_paging
+    send undo screen-length disable
+
+macro disable_paging
+    send screen-length disable
+
+macro save
+    send save %s
+    match /Are you sure/
+    send "Y"
+    match /enter key/
+    send ""
+    follow /\[Y/N\]/ with "Y\n"
+    match privileged
